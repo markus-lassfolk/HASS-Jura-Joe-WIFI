@@ -13,7 +13,14 @@ def make_device(adv: bytes) -> Device:
 
     machine = get_machine(adv)
     ble = BLEDevice("", None, None, 0)
-    device = Device("Jura", machine["model"], machine["products"], ble)
+    device = Device(
+        "Jura",
+        machine["model"],
+        machine["products"],
+        machine["alerts"],
+        machine["key"],
+        ble,
+    )
     device.client.ping = lambda *args: None
     return device
 
@@ -57,7 +64,7 @@ def test_device_e8():
     device.select_option("product", "Cafe Barista")
 
     cmd = device.command()
-    assert cmd.hex() == "002800061200000100000900000000000000"
+    assert cmd.hex() == "00280006120000010000090000000000002a"
 
     attr = device.attribute("coffee_strength")
     assert attr == {
@@ -73,12 +80,12 @@ def test_device_e8():
     device.set_value("water_amount", 50)
 
     cmd = device.command()
-    assert cmd.hex() == "0028000a0a00000100000900000000000000"
+    assert cmd.hex() == "0028000a0a0000010000090000000000002a"
 
     # Select product
     device.select_option("product", "Cappuccino")
     cmd = device.command()
-    assert cmd.hex() == "000400080c000e0100000000000000000000"
+    assert cmd.hex() == "000400080c000e010000000000000000002a"
 
 
 def test_device_d4():
@@ -152,7 +159,7 @@ def test_device_giga5():
     device.select_option("product", "Coffee")
 
     cmd = device.command()
-    assert cmd.hex() == "000302031400000100000000000000000000"
+    assert cmd.hex() == "00030203140000010000000000000000002a"
 
     attr = device.attribute("coffee_strength")
     assert attr == {
