@@ -1,8 +1,14 @@
+import re
+
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.entity import DeviceInfo, Entity
 
 from . import DOMAIN
 from .device import Device
+
+
+def sanitize(entity_id: str) -> str:
+    return re.sub(r"[^0-9a-z_]+", "", entity_id.lower())
 
 
 class JuraEntity(Entity):
@@ -22,7 +28,7 @@ class JuraEntity(Entity):
         self._attr_name = device.name + " " + attr.replace("_", " ").title()
         self._attr_unique_id = device.mac.replace(":", "") + "_" + attr
 
-        self.entity_id = DOMAIN + "." + self._attr_unique_id
+        self.entity_id = DOMAIN + "." + sanitize(self._attr_unique_id)
 
         self.internal_update()
 
