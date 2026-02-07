@@ -12,7 +12,7 @@ def make_device(adv: bytes) -> Device:
     asyncio.get_running_loop = lambda: None
 
     machine = get_machine(adv)
-    ble = BLEDevice("", None, None, 0)
+    ble = BLEDevice("", None, None)
     device = Device(
         "Jura",
         machine["model"],
@@ -307,3 +307,9 @@ def test_status_key00():
     b = bytes.fromhex("144448C623752D94BFE772ED1B3F65136B888DD2")
     b = encdec(b, 0)
     assert b.hex() == "0000040000200008000000000000000000000006"
+
+
+def test_issue52():
+    adv = b"*\x05\x08\x03\xe8;\x11\xad\x04\x001?\x94>\x01\xc0A\xb6(\x00\x00\x00\x00\x00\x00\x00\x00"
+    device = make_device(adv)
+    assert device.model == "E8 (EB)"
