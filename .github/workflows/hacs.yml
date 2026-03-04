@@ -1,4 +1,4 @@
-name: HACS validation
+name: HACS & Hassfest Validation
 
 on:
   push:
@@ -6,13 +6,17 @@ on:
 
 jobs:
   hacs:
-    runs-on: "ubuntu-latest"
+    name: HACS Validation
+    runs-on: ubuntu-latest
     steps:
-      - uses: "actions/checkout@v2"
-      - uses: "hacs/action@main"
-        with: { category: "integration" }
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration
+
   hassfest:
-    runs-on: "ubuntu-latest"
+    name: Hassfest (HA Manifest)
+    runs-on: ubuntu-latest
     steps:
-      - uses: "actions/checkout@v3"
-      - uses: "home-assistant/actions/hassfest@master"
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master

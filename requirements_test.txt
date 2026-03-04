@@ -1,0 +1,13 @@
+# Test dependencies for the Jura HASS integration
+
+# Home Assistant (provides homeassistant.* imports used in custom_components)
+homeassistant>=2024.1.0
+
+# Integration runtime dependencies (mirrors manifest.json requirements)
+bleak>=0.21.0
+bleak-retry-connector>=3.0.0
+xmltodict>=0.13.0
+
+# Test framework
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
