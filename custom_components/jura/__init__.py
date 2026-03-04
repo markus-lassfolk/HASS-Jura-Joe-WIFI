@@ -3,12 +3,14 @@ import logging
 
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import __version__
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
 
 from .core import DOMAIN
 from .core.device import Device, EmptyModel, UnsupportedModel, get_machine
 from .core.wifi_device import WifiDevice
+from .error_reporting import async_init_error_reporting
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +25,21 @@ WIFI_POLL_INTERVAL = 30  # seconds
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     devices = hass.data.setdefault(DOMAIN, {})
 
-    if entry.data.get("connection_type") == "wifi":
+    connection_type = entry.data.get("connection_type", "ble")
+    tags: dict[str, str] = {
+        "integration": DOMAIN,
+        "integration_version": "1.3.0",
+        "connection_type": connection_type,
+        "ha_version": __version__,
+    }
+    if connection_type == "wifi":
+        host = entry.data.get("host", "")
+        last_octet = host.rsplit(".", 1)[-1] if host else "?"
+        tags["machine_host"] = f"*.*.*.{last_octet}"
+
+    await async_init_error_reporting(hass, tags=tags)
+
+    if connection_type == "wifi":
         return await _setup_wifi_entry(hass, entry, devices)
 
     return await _setup_ble_entry(hass, entry, devices)
