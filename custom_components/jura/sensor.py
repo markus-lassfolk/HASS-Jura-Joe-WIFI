@@ -17,6 +17,7 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .core import DOMAIN
 from .core.entity import JuraEntity, JuraWifiEntity
+from .core.wifi_device import DEFAULT_PRODUCTS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +33,12 @@ async def async_setup_entry(
             JuraWifiMachineStateSensor(device),
             JuraWifiFirmwareSensor(device),
             JuraWifiTemperatureSensor(device),
+            JuraWifiTotalProductsSensor(device),
+            JuraWifiMaintenanceSensor(device),
         ]
+        # Per-product cup counter sensors for each default product
+        for code, name in DEFAULT_PRODUCTS.items():
+            entities.append(JuraWifiProductCountSensor(device, code, name))
         async_add_entities(entities)
         return
 
@@ -238,6 +244,72 @@ class JuraWifiTemperatureSensor(JuraWifiEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         return self.device.temperature
+
+    def internal_update(self):
+        if self.hass:
+            self.async_write_ha_state()
+
+
+class JuraWifiTotalProductsSensor(JuraWifiEntity, SensorEntity):
+    """Sensor for total cups made across all products (from @TR:32 counters)."""
+
+    _attr_icon = "mdi:coffee"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "cups"
+
+    def __init__(self, device):
+        super().__init__(device, "total_products")
+        self._attr_name = f"{device.name} Total Products"
+
+    @property
+    def native_value(self) -> int | None:
+        if not self.device.connected:
+            return None
+        return self.device.total_products()
+
+    def internal_update(self):
+        if self.hass:
+            self.async_write_ha_state()
+
+
+class JuraWifiProductCountSensor(JuraWifiEntity, SensorEntity):
+    """Sensor for per-product cup count from @TR:32 counters."""
+
+    _attr_icon = "mdi:coffee-outline"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "cups"
+
+    def __init__(self, device, product_code: int, product_name: str):
+        self._product_code = product_code
+        attr = f"count_{product_name.lower().replace(' ', '_')}"
+        super().__init__(device, attr)
+        self._attr_name = f"{device.name} {product_name} Count"
+
+    @property
+    def native_value(self) -> int | None:
+        if not self.device.connected:
+            return None
+        return self.device.product_count(self._product_code)
+
+    def internal_update(self):
+        if self.hass:
+            self.async_write_ha_state()
+
+
+class JuraWifiMaintenanceSensor(JuraWifiEntity, SensorEntity):
+    """Diagnostic sensor exposing the raw @TG:43 maintenance counter payload."""
+
+    _attr_icon = "mdi:wrench-clock"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, device):
+        super().__init__(device, "maintenance_data")
+        self._attr_name = f"{device.name} Maintenance Data"
+
+    @property
+    def native_value(self) -> str | None:
+        raw = self.device.maintenance_hex
+        return raw if raw else None
 
     def internal_update(self):
         if self.hass:

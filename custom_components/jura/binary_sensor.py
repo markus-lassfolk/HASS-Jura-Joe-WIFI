@@ -84,7 +84,7 @@ ALERT_SENSORS = [
     },
 ]
 
-# WiFi state-word binary sensors
+# WiFi state-word binary sensors — basic machine conditions
 _WIFI_STATE_SENSORS = [
     {
         "attr": "machine_ready",
@@ -118,6 +118,71 @@ _WIFI_STATE_SENSORS = [
         "attr": "grounds_full",
         "display_name": "Grounds Full",
         "icon": "mdi:delete-alert",
+        "device_class": BinarySensorDeviceClass.PROBLEM,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    # Active-process indicators
+    {
+        "attr": "brewing",
+        "display_name": "Brewing",
+        "icon": "mdi:coffee",
+        "device_class": BinarySensorDeviceClass.RUNNING,
+        "entity_category": None,
+    },
+    {
+        "attr": "grinding",
+        "display_name": "Grinding",
+        "icon": "mdi:coffee-maker",
+        "device_class": BinarySensorDeviceClass.RUNNING,
+        "entity_category": None,
+    },
+    {
+        "attr": "heating",
+        "display_name": "Heating",
+        "icon": "mdi:thermometer-high",
+        "device_class": BinarySensorDeviceClass.HEAT,
+        "entity_category": None,
+    },
+    {
+        "attr": "rinsing",
+        "display_name": "Rinsing",
+        "icon": "mdi:water-sync",
+        "device_class": BinarySensorDeviceClass.RUNNING,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    {
+        "attr": "cleaning",
+        "display_name": "Cleaning Active",
+        "icon": "mdi:washing-machine",
+        "device_class": BinarySensorDeviceClass.RUNNING,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    {
+        "attr": "error",
+        "display_name": "Error",
+        "icon": "mdi:alert-circle",
+        "device_class": BinarySensorDeviceClass.PROBLEM,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    # Maintenance reminders (parsed from @TG:43)
+    {
+        "attr": "maintenance_cleaning_needed",
+        "display_name": "Cleaning Needed",
+        "icon": "mdi:washing-machine-alert",
+        "device_class": BinarySensorDeviceClass.PROBLEM,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    {
+        "attr": "maintenance_descaling_needed",
+        "display_name": "Descaling Needed",
+        "icon": "mdi:water-remove",
+        "device_class": BinarySensorDeviceClass.PROBLEM,
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    {
+        "attr": "maintenance_filter_needed",
+        "display_name": "Filter Change Needed",
+        "icon": "mdi:air-filter",
         "device_class": BinarySensorDeviceClass.PROBLEM,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
@@ -212,7 +277,8 @@ class JuraWifiConnectivity(JuraWifiEntity, BinarySensorEntity):
 
 
 class JuraWifiStateBit(JuraWifiEntity, BinarySensorEntity):
-    """Binary sensor derived from a single bit of the @TM:08 state word."""
+    """Binary sensor derived from a single bit of the @TM:08 state word,
+    or from a maintenance helper method on WifiDevice."""
 
     def __init__(self, device, sensor_def: dict):
         self._state_attr = sensor_def["attr"]

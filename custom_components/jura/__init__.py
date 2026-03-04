@@ -14,8 +14,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # Platforms loaded for BLE entries
 BLE_PLATFORMS = ["binary_sensor", "button", "number", "select", "switch", "sensor"]
-# Platforms loaded for WiFi entries (read-only state sensors only)
-WIFI_PLATFORMS = ["binary_sensor", "sensor"]
+# Platforms loaded for WiFi entries
+WIFI_PLATFORMS = ["binary_sensor", "sensor", "button", "select", "number"]
 
 WIFI_POLL_INTERVAL = 30  # seconds
 
