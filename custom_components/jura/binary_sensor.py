@@ -201,6 +201,9 @@ class JuraWifiConnectivity(JuraWifiEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
+    def __init__(self, device):
+        super().__init__(device, "connectivity")
+
     def internal_update(self):
         self._attr_is_on = self.device.connected
         self._attr_extra_state_attributes = self.device.conn_info

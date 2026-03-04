@@ -58,8 +58,8 @@ async def _setup_wifi_entry(
         )
     )
 
-    async def _unload():
-        await device.disconnect()
+    def _unload():
+        hass.async_create_task(device.disconnect())
 
     entry.async_on_unload(_unload)
     return True

@@ -50,6 +50,7 @@ class WifiClient:
             _LOGGER.warning(
                 "WiFi auth failed for %s, response: %r", self.host, response
             )
+            await self.disconnect()
         return self.connected
 
     async def _send_frame(self, cmd: str):
@@ -89,9 +90,10 @@ class WifiClient:
         await self.send_command("@TS:01")
         resp = await self.send_command("@TM:08")
         await self.send_command("@TS:00")
-        if resp.startswith("@tm:08,"):
+        resp_lower = resp.lower()
+        if resp_lower.startswith("@tm:08,"):
             try:
-                return int(resp[7:].strip(), 16)
+                return int(resp_lower[7:].strip(), 16)
             except ValueError:
                 _LOGGER.debug("Could not parse state word from: %r", resp)
         return 0
@@ -99,7 +101,8 @@ class WifiClient:
     async def get_firmware_version(self) -> str:
         """Return firmware version string from @TG:C0."""
         resp = await self.send_command("@TG:C0")
-        if resp.startswith("@tg:"):
+        resp_lower = resp.lower()
+        if resp_lower.startswith("@tg:"):
             return resp[4:].strip()
         return ""
 
