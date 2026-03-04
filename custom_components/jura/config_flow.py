@@ -13,9 +13,9 @@ import asyncio
 import logging
 
 from homeassistant.components import bluetooth
-from homeassistant.components.dhcp import DhcpServiceInfo
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.core import callback
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 import voluptuous as vol
 
 from .core import DOMAIN
