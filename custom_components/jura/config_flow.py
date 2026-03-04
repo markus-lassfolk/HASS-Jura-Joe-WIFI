@@ -132,7 +132,7 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
 
         try:
             transport.sendto(DISCOVERY_PROBE, (host, DISCOVERY_PORT))
-            with asyncio.timeout(3.0):
+            async with asyncio.timeout(3.0):
                 await event.wait()
         except TimeoutError:
             _LOGGER.debug("No Jura probe response from %s", host)
