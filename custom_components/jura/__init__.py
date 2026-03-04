@@ -43,12 +43,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                 last_octet = parts[-1]
                 tags["machine_host"] = f"*.*.*.{last_octet}"
 
-    await async_init_error_reporting(hass, tags=tags, entry_id=entry.entry_id)
+    # Error reporting: enabled by default, opt-out via integration options
+    error_reporting_enabled = entry.options.get("error_reporting", True)
+    await async_init_error_reporting(
+        hass, tags=tags, entry_id=entry.entry_id, enabled=error_reporting_enabled
+    )
+
+    # Listen for options updates (e.g. user toggles error reporting)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     if connection_type == "wifi":
         return await _setup_wifi_entry(hass, entry, devices)
 
     return await _setup_ble_entry(hass, entry, devices)
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update — reload integration to apply changes."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def _setup_wifi_entry(
