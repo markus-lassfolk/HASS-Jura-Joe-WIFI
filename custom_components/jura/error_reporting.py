@@ -17,7 +17,7 @@ _SDK_INITIALIZED = False
 # Default DSN for the hass-jura GlitchTip project.
 # Enabled by default during beta to help find issues.
 # Opt-out: set JURA_SENTRY_DSN="" or pass enabled=False.
-_DEFAULT_DSN = ""
+_DEFAULT_DSN = "https://77a6e3e26c6546e892a56836276e72d3@glitchtip.lassfolk.cc/5"
 
 
 def init_error_reporting(
