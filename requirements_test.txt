@@ -11,6 +11,7 @@ xmltodict>=0.13.0
 
 # Required by homeassistant.components.usb (imported transitively via bluetooth)
 pyserial>=3.5
+aiousbwatcher>=1.0.0; python_version>="3.13"
 
 # Test framework
 pytest>=7.4.0
