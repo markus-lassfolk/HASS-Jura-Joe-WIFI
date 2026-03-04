@@ -37,19 +37,23 @@
         }
       },
       "wifi_auth": {
-        "title": "WiFi Authentication",
-        "description": "Enter the auth hash from your J.O.E. app pairing. Leave PIN empty if not required.",
+        "title": "Pairing with Jura Machine",
+        "description": "If your machine requires a PIN, it will be displayed on the machine's screen. Enter it below. If no PIN is needed, leave it empty and submit.",
         "data": {
-          "auth_hash": "Auth Hash",
-          "pin": "PIN (optional)",
-          "device_name": "Device Name",
-          "port": "Port"
+          "pin": "PIN (shown on machine display)"
         }
       }
     },
     "abort": {
       "already_configured": "This Jura machine is already configured.",
-      "not_jura": "The discovered device is not a Jura coffee machine."
+      "not_jura": "The discovered device is not a Jura coffee machine.",
+      "cannot_connect": "Could not connect to the Jura machine. Check that it is powered on and connected to WiFi."
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the machine.",
+      "wrong_pin": "Incorrect PIN. Check the PIN displayed on your machine.",
+      "wrong_hash": "Authentication rejected. Try removing the device from J.O.E. and re-pairing.",
+      "auth_failed": "Authentication failed. Please try again."
     }
   }
 }

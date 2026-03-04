@@ -10,6 +10,7 @@ Options flow for runtime settings (error reporting opt-out, etc.)
 """
 
 import asyncio
+import contextlib
 import logging
 
 from homeassistant.components import bluetooth
@@ -224,31 +225,137 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_wifi_auth(self, user_input=None):
-        """WiFi step 2: enter auth credentials (auth hash from J.O.E. app pairing)."""
+        """WiFi step 2: attempt auto-pairing with the machine.
+
+        Protocol:
+        1. Connect and send @HP: with empty hash → machine responds @hp4 (already
+           paired) or @hp5:00 (needs PIN).
+        2. If @hp5:00, show a form asking for the PIN displayed on the machine.
+        3. Re-send @HP:<pin>,<deviceNameHex>, → machine responds @hp4:<hash>
+           with a new auth hash to store.
+        """
+        port = 51515
+        device_name = "HomeAssistant"
+        device_name_hex = device_name.encode().hex()
+        errors: dict[str, str] = {}
+
         if user_input is not None:
+            # User submitted PIN from the machine display
+            pin = user_input.get("pin", "")
+            auth_result = await self._async_try_auth(
+                self._wifi_host, port, pin, device_name_hex
+            )
+            if auth_result is None:
+                errors["base"] = "cannot_connect"
+            elif auth_result.get("state") == "correct":
+                return self.async_create_entry(
+                    title=f"Jura WiFi ({self._wifi_host})",
+                    data={
+                        "connection_type": CONNECTION_TYPE_WIFI,
+                        "host": self._wifi_host,
+                        "port": port,
+                        "pin": pin,
+                        "auth_hash": auth_result.get("hash", ""),
+                        "device_name": device_name,
+                    },
+                )
+            elif auth_result.get("state") == "wrong_pin":
+                errors["base"] = "wrong_pin"
+            elif auth_result.get("state") == "wrong_hash":
+                errors["base"] = "wrong_hash"
+            else:
+                errors["base"] = "auth_failed"
+
+            return self.async_show_form(
+                step_id="wifi_auth",
+                data_schema=vol.Schema({vol.Optional("pin", default=""): str}),
+                errors=errors,
+                description_placeholders={"host": self._wifi_host},
+            )
+
+        # First attempt: try connecting with empty hash (maybe already paired)
+        auth_result = await self._async_try_auth(
+            self._wifi_host, port, "", device_name_hex
+        )
+
+        if auth_result is None:
+            return self.async_abort(reason="cannot_connect")
+
+        if auth_result.get("state") == "correct":
+            # Machine accepted empty-hash connection (no PIN required)
             return self.async_create_entry(
                 title=f"Jura WiFi ({self._wifi_host})",
                 data={
                     "connection_type": CONNECTION_TYPE_WIFI,
                     "host": self._wifi_host,
-                    "port": user_input.get("port", 51515),
-                    "pin": user_input.get("pin", ""),
-                    "auth_hash": user_input.get("auth_hash", ""),
-                    "device_name": user_input.get("device_name", "HomeAssistant"),
+                    "port": port,
+                    "pin": "",
+                    "auth_hash": auth_result.get("hash", ""),
+                    "device_name": device_name,
                 },
             )
 
+        # Machine needs PIN — show the PIN entry form
         return self.async_show_form(
             step_id="wifi_auth",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("auth_hash"): str,
-                    vol.Optional("pin", default=""): str,
-                    vol.Optional("device_name", default="HomeAssistant"): str,
-                    vol.Optional("port", default=51515): int,
-                }
-            ),
+            data_schema=vol.Schema({vol.Optional("pin", default=""): str}),
+            description_placeholders={"host": self._wifi_host},
         )
+
+    async def _async_try_auth(
+        self, host: str, port: int, pin: str, device_name_hex: str
+    ) -> dict | None:
+        """Attempt TCP auth handshake with the Jura machine.
+
+        Returns:
+            {"state": "correct", "hash": "<hex>"} on success (@hp4 / @hp4:<hash>)
+            {"state": "wrong_pin"} on @hp5 / @hp5:00
+            {"state": "wrong_hash"} on @hp5:01
+            {"state": "aborted"} on @hp5:02
+            None on connection failure
+        """
+        from .core.wifi_encryption import wifi_make_frame, wifi_parse_frame
+
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port), timeout=5.0
+            )
+        except (OSError, TimeoutError):
+            return None
+
+        try:
+            auth_cmd = f"@HP:{pin},{device_name_hex},"
+            frame = wifi_make_frame(auth_cmd)
+            writer.write(frame)
+            await writer.drain()
+
+            # Read response (with timeout)
+            async with asyncio.timeout(5.0):
+                data = await reader.read(4096)
+
+            response = wifi_parse_frame(data)
+            _LOGGER.debug("Auth probe response from %s: %r", host, response)
+
+            if response.startswith("@hp4:"):
+                # Success with new hash — extract it
+                new_hash = response[5:].strip()
+                return {"state": "correct", "hash": new_hash}
+            if response.startswith("@hp4"):
+                return {"state": "correct", "hash": ""}
+            if response in ("@hp5", "@hp5:00"):
+                return {"state": "wrong_pin"}
+            if response == "@hp5:01":
+                return {"state": "wrong_hash"}
+            if response == "@hp5:02":
+                return {"state": "aborted"}
+            return {"state": "unknown", "raw": response}
+        except (OSError, TimeoutError) as err:
+            _LOGGER.debug("Auth probe to %s failed: %s", host, err)
+            return None
+        finally:
+            writer.close()
+            with contextlib.suppress(Exception):
+                await writer.wait_closed()
 
 
 class JuraOptionsFlowHandler(OptionsFlow):
