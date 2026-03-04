@@ -1,9 +1,10 @@
 import asyncio
+import contextlib
+from collections.abc import Callable
 import logging
 import time
-from typing import Callable
 
-from bleak import BLEDevice, BleakClient, BleakError
+from bleak import BleakClient, BleakError, BLEDevice
 from bleak_retry_connector import establish_connection
 
 from . import encryption
@@ -30,7 +31,7 @@ class UUIDs:
 
 
 class Client:
-    def __init__(self, device: BLEDevice, callback: Callable = None, key: int = None):
+    def __init__(self, device: BLEDevice, callback: Callable | None = None, key: int | None = None):
         self.device = device
         self.callback = callback
         self.client: BleakClient | None = None
@@ -108,10 +109,8 @@ class Client:
                     self.ping_future = self.loop.create_future()
                     # 10 is too late, 9 is ok
                     self.loop.call_later(9, self.ping_future.cancel)
-                    try:
+                    with contextlib.suppress(asyncio.CancelledError):
                         await self.ping_future
-                    except asyncio.CancelledError:
-                        pass
 
                 await self.client.disconnect()
             except TimeoutError:

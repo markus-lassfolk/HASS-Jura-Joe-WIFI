@@ -3,10 +3,14 @@
 # Home Assistant (provides homeassistant.* imports used in custom_components)
 homeassistant>=2024.1.0
 
-# Integration runtime dependencies (mirrors manifest.json requirements)
+# Integration runtime dependencies (bleak/bleak-retry-connector are loaded by HA
+# via the bluetooth integration; xmltodict is listed in manifest.json requirements)
 bleak>=0.21.0
 bleak-retry-connector>=3.0.0
 xmltodict>=0.13.0
+
+# Required by homeassistant.components.usb (imported transitively via bluetooth)
+pyserial>=3.5
 
 # Test framework
 pytest>=7.4.0

@@ -1,11 +1,12 @@
+from collections.abc import Callable
+from datetime import UTC, datetime
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, TypedDict
+from typing import TypedDict
 from zipfile import ZipFile
 
-import xmltodict
 from bleak import AdvertisementData, BLEDevice
+import xmltodict
 
 from .client import Client
 
@@ -85,7 +86,7 @@ class Device:
             self.updates_product.append(handler)
 
     def update_ble(self, advertisment: AdvertisementData):
-        self.conn_info["last_seen"] = datetime.now(timezone.utc)
+        self.conn_info["last_seen"] = datetime.now(UTC)
         self.conn_info["rssi"] = advertisment.rssi
 
         for handler in self.updates_connect:
@@ -337,7 +338,7 @@ def get_machine(adv: bytes) -> dict | None:
             try:
                 line = next(i for i in txt.readlines() if i.startswith(prefix))
             except StopIteration:
-                raise UnsupportedModel(model_id)
+                raise UnsupportedModel(model_id) from None
             items = line.decode().split(";")
 
         dirname = f"documents/xml/{items[2].upper()}/"
@@ -355,7 +356,7 @@ def get_machine(adv: bytes) -> dict | None:
                 alerts = {
                     int(i["@Bit"]): i["@Name"] for i in raw["JOE"]["ALERTS"]["ALERT"]
                 }
-            except:
+            except Exception:
                 alerts = {}
 
     # First byte is the encryption key

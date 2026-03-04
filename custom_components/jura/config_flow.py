@@ -1,6 +1,6 @@
-import voluptuous as vol
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigFlow
+import voluptuous as vol
 
 from .core import DOMAIN
 
