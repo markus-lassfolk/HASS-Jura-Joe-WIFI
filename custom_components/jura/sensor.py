@@ -1,8 +1,8 @@
 """Sensor platform for Jura integration."""
 
-import logging
 from datetime import timedelta
-from typing import Any
+import logging
+from typing import Any, ClassVar
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -136,7 +136,7 @@ class JuraAlertSensor(JuraEntity, SensorEntity):
 
     _attr_icon = "mdi:alert"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ["ok", "alert"]
+    _attr_options: ClassVar[list[str]] = ["ok", "alert"]
 
     def __init__(self, device):
         """Initialize the sensor."""

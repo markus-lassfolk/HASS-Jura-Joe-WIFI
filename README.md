@@ -2,7 +2,7 @@
 
 [Home Assistant](https://www.home-assistant.io/) custom component for control [Jura Coffee Machines](https://us.jura.com/) via [Bluetooth module](https://us.jura.com/en/homeproducts/accessories/SmartConnect-Main-72167).
 
-Tested with the following coffee machines, but should support others: 
+Tested with the following coffee machines, but should support others:
 
 - [Jura D4](https://github.com/AlexxIT/Jura/issues/49)
 - [Jura E4](https://github.com/AlexxIT/Jura/issues/47)
@@ -22,7 +22,7 @@ Or manually copy `jura` folder from [latest release](https://github.com/AlexxIT/
 
 ## Configuration
 
-1. Add default [Bluetooth](https://www.home-assistant.io/integrations/bluetooth/) integration. 
+1. Add default [Bluetooth](https://www.home-assistant.io/integrations/bluetooth/) integration.
 
 2. Configuration > [Integrations](https://my.home-assistant.io/redirect/integrations/) > Add Integration > [JURA Coffee Machines](https://my.home-assistant.io/redirect/config_flow_start/?domain=jura)
 
