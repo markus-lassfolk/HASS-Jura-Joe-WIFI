@@ -46,6 +46,10 @@
           "port": "Port"
         }
       }
+    },
+    "abort": {
+      "already_configured": "This Jura machine is already configured.",
+      "not_jura": "The discovered device is not a Jura coffee machine."
     }
   }
 }

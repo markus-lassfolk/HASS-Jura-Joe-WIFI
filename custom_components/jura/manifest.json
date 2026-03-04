@@ -6,7 +6,13 @@
   ],
   "config_flow": true,
   "dependencies": [
-    "bluetooth_adapters"
+    "bluetooth_adapters",
+    "dhcp"
+  ],
+  "dhcp": [
+    {
+      "hostname": "espressif"
+    }
   ],
   "documentation": "https://github.com/AlexxIT/Jura",
   "integration_type": "device",

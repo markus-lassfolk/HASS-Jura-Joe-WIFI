@@ -3,6 +3,8 @@
 Supports two connection types:
 - BLE: existing Bluetooth flow (select MAC from discovered devices)
 - WiFi: UDP auto-discovery + manual IP entry, then auth hash entry
+- DHCP: passive discovery when HA detects an ESP32 on the network,
+  confirmed via UDP probe before presenting to the user
 
 Options flow for runtime settings (error reporting opt-out, etc.)
 """
@@ -11,12 +13,18 @@ import asyncio
 import logging
 
 from homeassistant.components import bluetooth
+from homeassistant.components.dhcp import DhcpServiceInfo
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.core import callback
 import voluptuous as vol
 
 from .core import DOMAIN
-from .core.discovery import discover_machines
+from .core.discovery import (
+    DISCOVERY_PORT,
+    DISCOVERY_PROBE,
+    MIN_RESPONSE_SIZE,
+    discover_machines,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +49,97 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         """Return the options flow handler."""
         return JuraOptionsFlowHandler(config_entry)
+
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> dict:
+        """Handle DHCP discovery of a potential Jura WiFi machine.
+
+        HA triggers this when a device with hostname 'espressif' appears.
+        We send the Jura UDP probe to confirm it's actually a Jura machine
+        before presenting the discovery to the user.
+        """
+        host = discovery_info.ip
+        mac = discovery_info.macaddress
+        _LOGGER.debug(
+            "DHCP discovery: hostname=%s ip=%s mac=%s",
+            discovery_info.hostname,
+            host,
+            mac,
+        )
+
+        # Check if we already have this device configured
+        for entry in self._async_current_entries():
+            if entry.data.get("host") == host:
+                return self.async_abort(reason="already_configured")
+
+        # Send UDP probe to confirm this is actually a Jura machine
+        jura_info = await self._async_probe_jura(host)
+        if jura_info is None:
+            _LOGGER.debug("DHCP device at %s is not a Jura machine", host)
+            return self.async_abort(reason="not_jura")
+
+        # It's a Jura! Store info and present discovery to user
+        self._wifi_host = host
+        name = jura_info.get("name", "Jura Coffee Machine")
+        model = jura_info.get("model", "")
+
+        await self.async_set_unique_id(jura_info.get("mac", mac))
+        self._abort_if_unique_id_configured(updates={"host": host})
+
+        self.context["title_placeholders"] = {
+            "name": name,
+            "model": model,
+            "host": host,
+        }
+
+        return await self.async_step_wifi_auth()
+
+    async def _async_probe_jura(self, host: str) -> dict | None:
+        """Send a UDP probe to check if the host is a Jura WiFi machine.
+
+        Returns parsed beacon dict if it's a Jura, None otherwise.
+        """
+        loop = asyncio.get_event_loop()
+        result: dict | None = None
+        event = asyncio.Event()
+
+        class _ProbeProtocol(asyncio.DatagramProtocol):
+            def __init__(self):
+                self.transport = None
+
+            def connection_made(self, transport):
+                self.transport = transport
+
+            def datagram_received(self, data, addr):
+                nonlocal result
+                if data == DISCOVERY_PROBE:
+                    return
+                if len(data) >= MIN_RESPONSE_SIZE:
+                    from .core.discovery import parse_beacon
+
+                    parsed = parse_beacon(data, addr=addr[0])
+                    if parsed:
+                        result = parsed
+                        event.set()
+
+        try:
+            transport, _protocol = await loop.create_datagram_endpoint(
+                _ProbeProtocol,
+                local_addr=("0.0.0.0", 0),
+            )
+        except OSError as err:
+            _LOGGER.debug("Cannot create probe socket: %s", err)
+            return None
+
+        try:
+            transport.sendto(DISCOVERY_PROBE, (host, DISCOVERY_PORT))
+            with asyncio.timeout(3.0):
+                await event.wait()
+        except TimeoutError:
+            _LOGGER.debug("No Jura probe response from %s", host)
+        finally:
+            transport.close()
+
+        return result
 
     async def async_step_user(self, user_input=None):
         """Step 1: choose BLE or WiFi."""
