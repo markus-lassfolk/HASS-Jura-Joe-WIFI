@@ -34,10 +34,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     }
     if connection_type == "wifi":
         host = entry.data.get("host", "")
-        last_octet = host.rsplit(".", 1)[-1] if host else "?"
-        tags["machine_host"] = f"*.*.*.{last_octet}"
+        # Only mask IPv4 addresses; skip IPv6 and hostnames
+        if host and "." in host and ":" not in host:
+            parts = host.split(".")
+            if len(parts) == 4 and all(
+                p.isdigit() and 0 <= int(p) <= 255 for p in parts
+            ):
+                last_octet = parts[-1]
+                tags["machine_host"] = f"*.*.*.{last_octet}"
 
-    await async_init_error_reporting(hass, tags=tags)
+    await async_init_error_reporting(hass, tags=tags, entry_id=entry.entry_id)
 
     if connection_type == "wifi":
         return await _setup_wifi_entry(hass, entry, devices)

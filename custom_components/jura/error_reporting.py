@@ -25,6 +25,7 @@ def init_error_reporting(
     environment: str = "production",
     enabled: bool = True,
     tags: dict[str, str] | None = None,
+    entry_id: str | None = None,
 ) -> None:
     """Initialize Sentry/GlitchTip error reporting for the Jura HA integration.
 
@@ -39,6 +40,7 @@ def init_error_reporting(
         environment: Environment tag (production/development/testing).
         enabled: Master switch. If False, no SDK initialization occurs.
         tags: Optional extra tags (e.g. connection_type, ha_version, integration_version).
+        entry_id: Config entry ID (unused, kept for API compatibility).
     """
     global _SDK_INITIALIZED
 
@@ -58,7 +60,7 @@ def init_error_reporting(
     try:
         import sentry_sdk
 
-        # Only initialize once; subsequent calls just add tags
+        # Only initialize once; set only constant tags to avoid conflicts
         if not _SDK_INITIALIZED:
             sentry_sdk.init(
                 dsn=effective_dsn,
@@ -71,9 +73,12 @@ def init_error_reporting(
             _SDK_INITIALIZED = True
             _LOGGER.debug("Error reporting initialized (dsn=%s...)", effective_dsn[:30])
 
-        if tags:
-            for key, value in tags.items():
-                sentry_sdk.set_tag(key, value)
+            # Set only constant tags globally; skip entry-specific tags to avoid
+            # conflicts when multiple config entries exist
+            if tags:
+                for key, value in tags.items():
+                    if key in ("integration", "integration_version", "ha_version"):
+                        sentry_sdk.set_tag(key, value)
 
     except ImportError:
         _LOGGER.debug("sentry-sdk not installed; error reporting disabled")
@@ -90,7 +95,7 @@ def _is_sensitive_key(key: str) -> bool:
     key_lower = key.lower()
     if any(
         s in key_lower
-        for s in ("password", "token", "secret", "credential", "auth_hash")
+        for s in ("password", "token", "secret", "credential", "auth_hash", "pin")
     ):
         return True
     return (
@@ -169,8 +174,9 @@ async def async_init_error_reporting(
     environment: str = "production",
     enabled: bool = True,
     tags: dict[str, str] | None = None,
+    entry_id: str | None = None,
 ) -> None:
     """Initialize error reporting in the executor to avoid blocking the event loop."""
     await hass.async_add_executor_job(
-        init_error_reporting, dsn, environment, enabled, tags
+        init_error_reporting, dsn, environment, enabled, tags, entry_id
     )
