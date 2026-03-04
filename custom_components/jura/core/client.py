@@ -1,6 +1,6 @@
 import asyncio
-import contextlib
 from collections.abc import Callable
+import contextlib
 import logging
 import time
 
@@ -31,7 +31,12 @@ class UUIDs:
 
 
 class Client:
-    def __init__(self, device: BLEDevice, callback: Callable | None = None, key: int | None = None):
+    def __init__(
+        self,
+        device: BLEDevice,
+        callback: Callable | None = None,
+        key: int | None = None,
+    ):
         self.device = device
         self.callback = callback
         self.client: BleakClient | None = None
