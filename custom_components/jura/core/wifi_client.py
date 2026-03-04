@@ -1,6 +1,7 @@
 """Async TCP client for Jura WiFi Connect module (port 51515)."""
 
 import asyncio
+import contextlib
 import logging
 
 from .wifi_encryption import wifi_make_frame, wifi_parse_frame
@@ -69,7 +70,7 @@ class WifiClient:
         try:
             data = await asyncio.wait_for(self._read_until_frame(), timeout)
             return wifi_parse_frame(data)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug("Read timeout waiting for response from %s", self.host)
             return ""
 
@@ -256,7 +257,6 @@ class WifiClient:
         """
         full_hex = ""
         # cmd_prefix looks like "@TR:32"; extract the base for response matching
-        resp_prefix = cmd_prefix.replace("@T", "@t").replace(":", ":")
         for page in range(16):
             resp = await self.send_command(f"{cmd_prefix},{page:02X}")
             if not resp:
@@ -282,10 +282,8 @@ class WifiClient:
         for i in range(0, len(full_hex), hex_per_entry):
             chunk = full_hex[i : i + hex_per_entry]
             if len(chunk) == hex_per_entry:
-                try:
+                with contextlib.suppress(ValueError):
                     counters[i // hex_per_entry] = int(chunk, 16)
-                except ValueError:
-                    pass
         return counters
 
     async def disconnect(self):

@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -51,7 +53,7 @@ class JuraWifiProductSelect(JuraWifiEntity, SelectEntity):
     """Select entity for choosing which product to brew on a WiFi Jura machine."""
 
     _attr_icon = "mdi:coffee-maker"
-    _attr_options = list(DEFAULT_PRODUCTS.values())
+    _attr_options: ClassVar[list[str]] = list(DEFAULT_PRODUCTS.values())
 
     def __init__(self, device):
         super().__init__(device, "product")

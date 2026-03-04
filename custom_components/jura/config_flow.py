@@ -8,9 +8,9 @@ Supports two connection types:
 import asyncio
 import logging
 
-import voluptuous as vol
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigFlow
+import voluptuous as vol
 
 from .core import DOMAIN
 from .core.discovery import discover_machines
@@ -93,8 +93,7 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             self._discovered = []
 
         host_options: dict[str, str] = {
-            m["ip"]: f"{m.get('name', m['ip'])} ({m['ip']})"
-            for m in self._discovered
+            m["ip"]: f"{m.get('name', m['ip'])} ({m['ip']})" for m in self._discovered
         }
         host_options[_MANUAL_IP] = "Enter IP address manually"
 

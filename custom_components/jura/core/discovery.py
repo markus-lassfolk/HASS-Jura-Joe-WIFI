@@ -29,7 +29,7 @@ def parse_beacon(data: bytes) -> dict | None:
             result["name"] = fields[0]
         if len(fields) >= 2:
             result["model"] = fields[1]
-        # MAC address is typically embedded at offset 6–12 in the beacon
+        # MAC address is typically embedded at offset 6-12 in the beacon
         mac_bytes = data[6:12]
         result["mac"] = ":".join(f"{b:02X}" for b in mac_bytes)
         return result
@@ -49,9 +49,7 @@ class _JuraDiscoveryProtocol(asyncio.DatagramProtocol):
         self.transport = transport
 
     def datagram_received(self, data, addr):
-        _LOGGER.debug(
-            "UDP datagram from %s, length=%d", addr[0], len(data)
-        )
+        _LOGGER.debug("UDP datagram from %s, length=%d", addr[0], len(data))
         if len(data) == BEACON_SIZE:
             machine = parse_beacon(data)
             if machine:
@@ -82,9 +80,7 @@ async def discover_machines(timeout: float = 5.0) -> list[dict]:
             allow_broadcast=True,
         )
     except OSError as e:
-        _LOGGER.warning(
-            "Cannot bind UDP port %d for discovery: %s", DISCOVERY_PORT, e
-        )
+        _LOGGER.warning("Cannot bind UDP port %d for discovery: %s", DISCOVERY_PORT, e)
         return []
 
     try:

@@ -1,5 +1,5 @@
-import logging
 from datetime import timedelta
+import logging
 
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
@@ -53,9 +53,7 @@ async def _setup_wifi_entry(
         await device.async_update()
 
     entry.async_on_unload(
-        async_track_time_interval(
-            hass, _poll, timedelta(seconds=WIFI_POLL_INTERVAL)
-        )
+        async_track_time_interval(hass, _poll, timedelta(seconds=WIFI_POLL_INTERVAL))
     )
 
     def _unload():

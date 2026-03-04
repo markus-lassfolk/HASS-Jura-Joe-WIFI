@@ -19,9 +19,9 @@ Machine state word (@TM:08) bit definitions:
     Bit 12 (0x00001000): error state
 """
 
+from collections.abc import Callable
 import logging
 import time
-from typing import Callable
 
 from .wifi_client import WifiClient
 
@@ -146,7 +146,9 @@ class WifiDevice:
 
         # Brew parameters (0 = use machine default)
         self._selected_product: int = 0x02  # default: Espresso
-        self._brew_params: dict[str, int] = {p["attr"]: p["default"] for p in WIFI_BREW_PARAMS}
+        self._brew_params: dict[str, int] = {
+            p["attr"]: p["default"] for p in WIFI_BREW_PARAMS
+        }
 
         # Statistics
         self._product_counters: dict[int, int] = {}
@@ -306,7 +308,8 @@ class WifiDevice:
                 raise ConnectionError(f"Cannot connect to {self.name}")
         if not self.machine_ready():
             _LOGGER.warning(
-                "Brew requested but machine is not ready (state=0x%08X)", self._state_word
+                "Brew requested but machine is not ready (state=0x%08X)",
+                self._state_word,
             )
         product_hex = self.build_brew_hex()
         _LOGGER.info(
@@ -334,7 +337,9 @@ class WifiDevice:
         if not self._client.connected:
             ok = await self._client.connect()
             if not ok:
-                _LOGGER.warning("Cannot connect to %s for statistics refresh", self.name)
+                _LOGGER.warning(
+                    "Cannot connect to %s for statistics refresh", self.name
+                )
                 return
         try:
             base = await self._client.read_product_counters()
@@ -395,7 +400,10 @@ class WifiDevice:
 
             # Refresh statistics once on startup, then every 10 minutes
             now = time.monotonic()
-            if not self._counters_loaded or (now - self._last_stats_update) >= _STATS_INTERVAL:
+            if (
+                not self._counters_loaded
+                or (now - self._last_stats_update) >= _STATS_INTERVAL
+            ):
                 await self.refresh_statistics()
                 return  # refresh_statistics already called _notify_updates
 

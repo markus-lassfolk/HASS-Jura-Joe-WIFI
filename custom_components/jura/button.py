@@ -18,11 +18,13 @@ async def async_setup_entry(
     device = hass.data[DOMAIN][config_entry.entry_id]
 
     if config_entry.data.get("connection_type") == "wifi":
-        add_entities([
-            JuraWifiBrewButton(device),
-            JuraWifiCancelBrewButton(device),
-            JuraWifiUpdateStatisticsButton(device),
-        ])
+        add_entities(
+            [
+                JuraWifiBrewButton(device),
+                JuraWifiCancelBrewButton(device),
+                JuraWifiUpdateStatisticsButton(device),
+            ]
+        )
         return
 
     add_entities(
