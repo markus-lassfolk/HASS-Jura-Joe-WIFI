@@ -18,7 +18,7 @@ jobs:
           cache: pip
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install ruff==0.9.0
 
       - name: Lint with ruff
         run: ruff check custom_components/ tests/
