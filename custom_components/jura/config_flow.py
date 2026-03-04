@@ -3,19 +3,24 @@
 Supports two connection types:
 - BLE: existing Bluetooth flow (select MAC from discovered devices)
 - WiFi: UDP auto-discovery + manual IP entry, then auth hash entry
+
+Options flow for runtime settings (error reporting opt-out, etc.)
 """
 
 import asyncio
 import logging
 
 from homeassistant.components import bluetooth
-from homeassistant.config_entries import ConfigFlow
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
+from homeassistant.core import callback
 import voluptuous as vol
 
 from .core import DOMAIN
 from .core.discovery import discover_machines
 
 _LOGGER = logging.getLogger(__name__)
+
+CONF_ERROR_REPORTING = "error_reporting"
 
 CONNECTION_TYPE_BLE = "ble"
 CONNECTION_TYPE_WIFI = "wifi"
@@ -30,6 +35,12 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
     def __init__(self):
         self._wifi_host: str = ""
         self._discovered: list[dict] = []
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Return the options flow handler."""
+        return JuraOptionsFlowHandler(config_entry)
 
     async def async_step_user(self, user_input=None):
         """Step 1: choose BLE or WiFi."""
@@ -136,6 +147,30 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                     vol.Optional("pin", default=""): str,
                     vol.Optional("device_name", default="HomeAssistant"): str,
                     vol.Optional("port", default=51515): int,
+                }
+            ),
+        )
+
+
+class JuraOptionsFlowHandler(OptionsFlow):
+    """Handle Jura integration options (error reporting, etc.)."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Manage integration options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current = self.config_entry.options.get(CONF_ERROR_REPORTING, True)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_ERROR_REPORTING, default=current): bool,
                 }
             ),
         )

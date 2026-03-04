@@ -3,12 +3,14 @@ import logging
 
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import __version__
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
 
 from .core import DOMAIN
 from .core.device import Device, EmptyModel, UnsupportedModel, get_machine
 from .core.wifi_device import WifiDevice
+from .error_reporting import async_init_error_reporting
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,10 +25,42 @@ WIFI_POLL_INTERVAL = 30  # seconds
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     devices = hass.data.setdefault(DOMAIN, {})
 
-    if entry.data.get("connection_type") == "wifi":
+    connection_type = entry.data.get("connection_type", "ble")
+    tags: dict[str, str] = {
+        "integration": DOMAIN,
+        "integration_version": "1.3.0",
+        "connection_type": connection_type,
+        "ha_version": __version__,
+    }
+    if connection_type == "wifi":
+        host = entry.data.get("host", "")
+        # Only mask IPv4 addresses; skip IPv6 and hostnames
+        if host and "." in host and ":" not in host:
+            parts = host.split(".")
+            if len(parts) == 4 and all(
+                p.isdigit() and 0 <= int(p) <= 255 for p in parts
+            ):
+                last_octet = parts[-1]
+                tags["machine_host"] = f"*.*.*.{last_octet}"
+
+    # Error reporting: enabled by default, opt-out via integration options
+    error_reporting_enabled = entry.options.get("error_reporting", True)
+    await async_init_error_reporting(
+        hass, tags=tags, entry_id=entry.entry_id, enabled=error_reporting_enabled
+    )
+
+    # Listen for options updates (e.g. user toggles error reporting)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
+    if connection_type == "wifi":
         return await _setup_wifi_entry(hass, entry, devices)
 
     return await _setup_ble_entry(hass, entry, devices)
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update — reload integration to apply changes."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def _setup_wifi_entry(

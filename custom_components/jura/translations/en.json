@@ -1,4 +1,14 @@
 {
+  "options": {
+    "step": {
+      "init": {
+        "title": "Jura Integration Settings",
+        "data": {
+          "error_reporting": "Enable anonymous crash reporting (helps improve the integration)"
+        }
+      }
+    }
+  },
   "config": {
     "step": {
       "user": {
