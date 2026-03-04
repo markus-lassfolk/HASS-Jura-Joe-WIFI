@@ -48,27 +48,36 @@ def parse_beacon(data: bytes, addr: str | None = None) -> dict | None:
         if len(fields) >= 3:
             result["model"] = fields[2]
 
-        # Find MAC address: 6 bytes matching XX:XX:XX pattern
-        # In the 142-byte response, MAC is typically near the end
-        # Known pattern: look for the OUI bytes we know (8C:4B:14 for Jura)
-        # More generically, scan for a valid MAC in the latter half
+        # Find MAC address at known offset 103 in the 142-byte beacon.
+        # The ESP32 MAC is a 6-byte block at a fixed position in the response.
+        # We validate by checking for a unicast MAC (LSB of first byte = 0).
         mac_found = False
-        for offset in range(len(data) - 6, max(len(data) // 2, 0), -1):
-            mac_bytes = data[offset : offset + 6]
-            # A valid MAC has at least some non-zero bytes and isn't all FF
+        # Primary: fixed offset 103 (confirmed via Jura E8 captures)
+        if len(data) >= 109:
+            mac_bytes = data[103:109]
             if (
                 mac_bytes != b"\x00" * 6
                 and mac_bytes != b"\xff" * 6
-                and any(b != 0 for b in mac_bytes[:3])
+                and (mac_bytes[0] & 0x01) == 0  # unicast MAC
             ):
-                # Check if this looks like a real MAC (OUI should be plausible)
-                mac_str = ":".join(f"{b:02X}" for b in mac_bytes)
-                result["mac"] = mac_str
+                result["mac"] = ":".join(f"{b:02X}" for b in mac_bytes)
                 mac_found = True
-                break
 
         if not mac_found:
-            # Fallback: use bytes at offset 6-12
+            # Fallback: scan the second half for any plausible unicast MAC
+            for offset in range(len(data) // 2, len(data) - 5):
+                mac_bytes = data[offset : offset + 6]
+                if (
+                    mac_bytes != b"\x00" * 6
+                    and mac_bytes != b"\xff" * 6
+                    and (mac_bytes[0] & 0x01) == 0
+                    and any(b != 0 for b in mac_bytes[:3])
+                ):
+                    result["mac"] = ":".join(f"{b:02X}" for b in mac_bytes)
+                    mac_found = True
+                    break
+
+        if not mac_found and len(data) >= 12:
             mac_bytes = data[6:12]
             result["mac"] = ":".join(f"{b:02X}" for b in mac_bytes)
 
@@ -105,13 +114,90 @@ class _JuraDiscoveryProtocol(asyncio.DatagramProtocol):
         _LOGGER.debug("Discovery socket error: %s", exc)
 
 
+def _get_local_subnets() -> list[tuple[str, int]]:
+    """Return list of (network_address, prefix_len) for local interfaces."""
+    import ipaddress
+
+    subnets: list[tuple[str, int]] = []
+    try:
+        import subprocess
+
+        out = subprocess.check_output(
+            ["ip", "-4", "-o", "addr", "show"],
+            timeout=3,
+            text=True,
+        )
+        for line in out.splitlines():
+            parts = line.split()
+            for i, part in enumerate(parts):
+                if part == "inet" and i + 1 < len(parts):
+                    try:
+                        net = ipaddress.IPv4Interface(parts[i + 1])
+                        if not net.ip.is_loopback:
+                            subnets.append(
+                                (str(net.network.network_address), net.network.prefixlen)
+                            )
+                    except ValueError:
+                        pass
+    except Exception:
+        pass
+    return subnets
+
+
+async def _probe_single_host(host: str) -> dict | None:
+    """Send a unicast UDP probe to one host and return parsed beacon or None."""
+    loop = asyncio.get_event_loop()
+    result: dict | None = None
+    event = asyncio.Event()
+
+    class _Protocol(asyncio.DatagramProtocol):
+        def __init__(self):
+            self.transport = None
+
+        def connection_made(self, transport):
+            self.transport = transport
+
+        def datagram_received(self, data, addr):
+            nonlocal result
+            if data == DISCOVERY_PROBE or len(data) < MIN_RESPONSE_SIZE:
+                return
+            parsed = parse_beacon(data, addr=addr[0])
+            if parsed:
+                result = parsed
+                event.set()
+
+    try:
+        transport, _ = await loop.create_datagram_endpoint(
+            _Protocol, local_addr=("0.0.0.0", 0)
+        )
+    except OSError:
+        return None
+
+    try:
+        transport.sendto(DISCOVERY_PROBE, (host, DISCOVERY_PORT))
+        async with asyncio.timeout(2.0):
+            await event.wait()
+    except (TimeoutError, OSError):
+        pass
+    finally:
+        transport.close()
+
+    return result
+
+
 async def discover_machines(
     timeout: float = 5.0, target_ip: str | None = None
 ) -> list[dict]:
     """Send discovery probes and return discovered Jura machines.
 
-    Sends the J.O.E. discovery probe to the broadcast address (and optionally
-    a specific IP), waits *timeout* seconds for responses, then returns results.
+    Uses a multi-strategy approach:
+    1. UDP broadcast to 255.255.255.255
+    2. Subnet-directed broadcast to each local /24
+    3. ARP neighbour unicast probes (parallel, like Yarbo discovery)
+    4. Specific target_ip if provided
+
+    The Jura machine only responds to unicast probes (not passive broadcast),
+    so strategies 3-4 are the most reliable.
     """
     machines: dict[str, dict] = {}
 
@@ -120,45 +206,81 @@ async def discover_machines(
         machines[key] = machine
 
     loop = asyncio.get_event_loop()
+
+    # --- Strategy 1+2: Broadcast probes (may not work in all network setups) ---
     try:
         transport, _protocol = await loop.create_datagram_endpoint(
             lambda: _JuraDiscoveryProtocol(on_machine),
-            local_addr=("0.0.0.0", DISCOVERY_PORT),
+            local_addr=("0.0.0.0", 0),
             allow_broadcast=True,
         )
     except OSError as e:
-        _LOGGER.warning("Cannot bind UDP port %d for discovery: %s", DISCOVERY_PORT, e)
-        # Try without binding to specific port (ephemeral port)
+        _LOGGER.warning("Cannot create broadcast socket: %s", e)
+        transport = None
+
+    if transport:
         try:
-            transport, _protocol = await loop.create_datagram_endpoint(
-                lambda: _JuraDiscoveryProtocol(on_machine),
-                local_addr=("0.0.0.0", 0),
-                allow_broadcast=True,
-            )
-        except OSError as e2:
-            _LOGGER.error("Cannot create discovery socket: %s", e2)
-            return []
+            sock = transport.get_extra_info("socket")
+            if sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
+            transport.sendto(DISCOVERY_PROBE, ("255.255.255.255", DISCOVERY_PORT))
+            _LOGGER.debug("Sent discovery probe to broadcast")
+
+            # Subnet-directed broadcasts
+            for net_addr, prefix in _get_local_subnets():
+                import ipaddress
+
+                net = ipaddress.IPv4Network(f"{net_addr}/{prefix}", strict=False)
+                bcast = str(net.broadcast_address)
+                transport.sendto(DISCOVERY_PROBE, (bcast, DISCOVERY_PORT))
+                _LOGGER.debug("Sent discovery probe to subnet broadcast %s", bcast)
+
+            if target_ip:
+                transport.sendto(DISCOVERY_PROBE, (target_ip, DISCOVERY_PORT))
+
+            # Wait a bit for broadcast responses
+            await asyncio.sleep(min(2.0, timeout))
+        finally:
+            transport.close()
+
+    if machines:
+        return list(machines.values())
+
+    # --- Strategy 3: ARP neighbour unicast probes (most reliable) ---
+    _LOGGER.debug("Broadcast discovery found nothing, trying ARP neighbour probes")
+    neighbours: list[str] = []
     try:
-        # Send discovery probe as broadcast
-        sock = transport.get_extra_info("socket")
-        if sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        proc = await asyncio.create_subprocess_exec(
+            "ip", "neigh",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+        for line in stdout.decode(errors="replace").splitlines():
+            parts = line.split()
+            if len(parts) >= 1 and ("REACHABLE" in line or "STALE" in line):
+                neighbours.append(parts[0])
+    except (FileNotFoundError, TimeoutError, OSError):
+        pass
 
-        transport.sendto(DISCOVERY_PROBE, ("255.255.255.255", DISCOVERY_PORT))
-        _LOGGER.debug("Sent discovery probe to broadcast")
+    if target_ip and target_ip not in neighbours:
+        neighbours.append(target_ip)
 
-        # Also send to specific IP if provided
-        if target_ip:
-            transport.sendto(DISCOVERY_PROBE, (target_ip, DISCOVERY_PORT))
-            _LOGGER.debug("Sent discovery probe to %s", target_ip)
+    if neighbours:
+        _LOGGER.debug("Probing %d ARP neighbours for Jura machines", len(neighbours))
+        # Probe in parallel (max 30 concurrent)
+        sem = asyncio.Semaphore(30)
 
-        # Send a second probe after 1 second in case first was lost
-        await asyncio.sleep(1.0)
-        transport.sendto(DISCOVERY_PROBE, ("255.255.255.255", DISCOVERY_PORT))
+        async def _limited_probe(ip: str) -> dict | None:
+            async with sem:
+                return await _probe_single_host(ip)
 
-        await asyncio.sleep(timeout - 1.0 if timeout > 1.0 else timeout)
-    finally:
-        transport.close()
+        results = await asyncio.gather(
+            *[_limited_probe(ip) for ip in neighbours]
+        )
+        for r in results:
+            if r:
+                on_machine(r)
 
     return list(machines.values())
