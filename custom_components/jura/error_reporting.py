@@ -11,10 +11,13 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# Track whether the SDK has been initialized to prevent reinit on multiple entries
+_SDK_INITIALIZED = False
+
 # Default DSN for the hass-jura GlitchTip project.
 # Enabled by default during beta to help find issues.
 # Opt-out: set JURA_SENTRY_DSN="" or pass enabled=False.
-_DEFAULT_DSN = "https://PLACEHOLDER@glitchtip.lassfolk.cc/5"
+_DEFAULT_DSN = ""
 
 
 def init_error_reporting(
@@ -37,6 +40,8 @@ def init_error_reporting(
         enabled: Master switch. If False, no SDK initialization occurs.
         tags: Optional extra tags (e.g. connection_type, ha_version, integration_version).
     """
+    global _SDK_INITIALIZED
+
     if not enabled:
         return
 
@@ -53,19 +58,23 @@ def init_error_reporting(
     try:
         import sentry_sdk
 
-        sentry_sdk.init(
-            dsn=effective_dsn,
-            environment=environment,
-            traces_sample_rate=0.1,
-            send_default_pii=False,
-            before_send=_scrub_event,
-        )
+        # Only initialize once; subsequent calls just add tags
+        if not _SDK_INITIALIZED:
+            sentry_sdk.init(
+                dsn=effective_dsn,
+                environment=environment,
+                traces_sample_rate=0.1,
+                send_default_pii=False,
+                include_local_variables=False,
+                before_send=_scrub_event,
+            )
+            _SDK_INITIALIZED = True
+            _LOGGER.debug("Error reporting initialized (dsn=%s...)", effective_dsn[:30])
 
         if tags:
             for key, value in tags.items():
                 sentry_sdk.set_tag(key, value)
 
-        _LOGGER.debug("Error reporting initialized (dsn=%s...)", effective_dsn[:30])
     except ImportError:
         _LOGGER.debug("sentry-sdk not installed; error reporting disabled")
     except Exception as exc:
@@ -143,6 +152,13 @@ def _scrub_event(event: dict, hint: dict) -> dict | None:  # type: ignore[type-a
         for _ctx_name, ctx_data in event["contexts"].items():
             if isinstance(ctx_data, dict):
                 _scrub_dict(ctx_data)
+
+    # Scrub local variables from stack frames (defense-in-depth)
+    for entry in values:
+        frames = entry.get("stacktrace", {}).get("frames") or []
+        for frame in frames:
+            if "vars" in frame and isinstance(frame["vars"], dict):
+                _scrub_dict(frame["vars"])
 
     return event
 
